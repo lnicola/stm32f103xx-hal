@@ -1,10 +1,9 @@
 //! Inter-Integrated Circuit (I2C) bus
 
-use cast::u8;
 use stm32f103xx::{I2C1, I2C2};
 
 use gpio::gpioa::{PA10, PA9};
-use gpio::gpiob::{PB6, PB7, PB8, PB9, PB10, PB11};
+use gpio::gpiob::{PB10, PB11, PB6, PB7, PB8, PB9};
 use gpio::{Alternate, PushPull};
 use hal::blocking::i2c::{Write, WriteRead};
 use rcc::{APB1, Clocks};
@@ -85,79 +84,79 @@ macro_rules! hal {
                     apb1.rstr().modify(|_, w| w.$i2cXrst().set_bit());
                     apb1.rstr().modify(|_, w| w.$i2cXrst().clear_bit());
 
-                    let freq = freq.into().0;
+                    // let freq = freq.into().0;
 
-                    assert!(freq <= 1_000_000);
+                    // assert!(freq <= 1_000_000);
 
-                    // TODO review compliance with the timing requirements of I2C
-                    // t_I2CCLK = 1 / PCLK1
-                    // t_PRESC  = (PRESC + 1) * t_I2CCLK
-                    // t_SCLL   = (SCLL + 1) * t_PRESC
-                    // t_SCLH   = (SCLH + 1) * t_PRESC
-                    //
-                    // t_SYNC1 + t_SYNC2 > 4 * t_I2CCLK
-                    // t_SCL ~= t_SYNC1 + t_SYNC2 + t_SCLL + t_SCLH
-                    let i2cclk = clocks.pclk1().0;
-                    let ratio = i2cclk / freq - 4;
-                    let (presc, scll, sclh, sdadel, scldel) = if freq >= 100_000 {
-                        // fast-mode or fast-mode plus
-                        // here we pick SCLL + 1 = 2 * (SCLH + 1)
-                        let presc = ratio / 387;
+                    // // TODO review compliance with the timing requirements of I2C
+                    // // t_I2CCLK = 1 / PCLK1
+                    // // t_PRESC  = (PRESC + 1) * t_I2CCLK
+                    // // t_SCLL   = (SCLL + 1) * t_PRESC
+                    // // t_SCLH   = (SCLH + 1) * t_PRESC
+                    // //
+                    // // t_SYNC1 + t_SYNC2 > 4 * t_I2CCLK
+                    // // t_SCL ~= t_SYNC1 + t_SYNC2 + t_SCLL + t_SCLH
+                    // let i2cclk = clocks.pclk1().0;
+                    // let ratio = i2cclk / freq - 4;
+                    // let (presc, scll, sclh, sdadel, scldel) = if freq >= 100_000 {
+                    //     // fast-mode or fast-mode plus
+                    //     // here we pick SCLL + 1 = 2 * (SCLH + 1)
+                    //     let presc = ratio / 387;
 
-                        let sclh = ((ratio / (presc + 1)) - 3) / 3;
-                        let scll = 2 * (sclh + 1) - 1;
+                    //     let sclh = ((ratio / (presc + 1)) - 3) / 3;
+                    //     let scll = 2 * (sclh + 1) - 1;
 
-                        let (sdadel, scldel) = if freq > 400_000 {
-                            // fast-mode plus
-                            let sdadel = 0;
-                            let scldel = i2cclk / 4_000_000 / (presc + 1) - 1;
+                    //     let (sdadel, scldel) = if freq > 400_000 {
+                    //         // fast-mode plus
+                    //         let sdadel = 0;
+                    //         let scldel = i2cclk / 4_000_000 / (presc + 1) - 1;
 
-                            (sdadel, scldel)
-                        } else {
-                            // fast-mode
-                            let sdadel = i2cclk / 8_000_000 / (presc + 1);
-                            let scldel = i2cclk / 2_000_000 / (presc + 1) - 1;
+                    //         (sdadel, scldel)
+                    //     } else {
+                    //         // fast-mode
+                    //         let sdadel = i2cclk / 8_000_000 / (presc + 1);
+                    //         let scldel = i2cclk / 2_000_000 / (presc + 1) - 1;
 
-                            (sdadel, scldel)
-                        };
+                    //         (sdadel, scldel)
+                    //     };
 
-                        (presc, scll, sclh, sdadel, scldel)
-                    } else {
-                        // standard-mode
-                        // here we pick SCLL = SCLH
-                        let presc = ratio / 514;
+                    //     (presc, scll, sclh, sdadel, scldel)
+                    // } else {
+                    //     // standard-mode
+                    //     // here we pick SCLL = SCLH
+                    //     let presc = ratio / 514;
 
-                        let sclh = ((ratio / (presc + 1)) - 2) / 2;
-                        let scll = sclh;
+                    //     let sclh = ((ratio / (presc + 1)) - 2) / 2;
+                    //     let scll = sclh;
 
-                        let sdadel = i2cclk / 2_000_000 / (presc + 1);
-                        let scldel = i2cclk / 800_000 / (presc + 1) - 1;
+                    //     let sdadel = i2cclk / 2_000_000 / (presc + 1);
+                    //     let scldel = i2cclk / 800_000 / (presc + 1) - 1;
 
-                        (presc, scll, sclh, sdadel, scldel)
-                    };
+                    //     (presc, scll, sclh, sdadel, scldel)
+                    // };
 
-                    let presc = u8(presc).unwrap();
-                    assert!(presc < 16);
-                    let scldel = u8(scldel).unwrap();
-                    assert!(scldel < 16);
-                    let sdadel = u8(sdadel).unwrap();
-                    assert!(sdadel < 16);
-                    let sclh = u8(sclh).unwrap();
-                    let scll = u8(scll).unwrap();
+                    // let presc = u8(presc).unwrap();
+                    // assert!(presc < 16);
+                    // let scldel = u8(scldel).unwrap();
+                    // assert!(scldel < 16);
+                    // let sdadel = u8(sdadel).unwrap();
+                    // assert!(sdadel < 16);
+                    // let sclh = u8(sclh).unwrap();
+                    // let scll = u8(scll).unwrap();
 
-                    // Configure for "fast mode" (400 KHz)
-                    i2c.timingr.write(|w| unsafe {
-                        w.presc()
-                            .bits(presc)
-                            .scll()
-                            .bits(scll)
-                            .sclh()
-                            .bits(sclh)
-                            .sdadel()
-                            .bits(sdadel)
-                            .scldel()
-                            .bits(scldel)
-                    });
+                    // // Configure for "fast mode" (400 KHz)
+                    // i2c.timingr.write(|w| unsafe {
+                    //     w.presc()
+                    //         .bits(presc)
+                    //         .scll()
+                    //         .bits(scll)
+                    //         .sclh()
+                    //         .bits(sclh)
+                    //         .sdadel()
+                    //         .bits(sdadel)
+                    //         .scldel()
+                    //         .bits(scldel)
+                    // });
 
                     // Enable the peripheral
                     i2c.cr1.write(|w| w.pe().set_bit());
@@ -180,7 +179,7 @@ macro_rules! hal {
                     busy_wait!(self.i2c, sb);
 
                     // slave address, wait for ADDR
-                    self.i2c.dr.write(|w| w.dr().bits(addr << 1));
+                    self.i2c.dr.write(|w| unsafe { w.dr().bits(addr << 1) });
                     busy_wait!(self.i2c, addr);
 
                     // clear ADDR
@@ -188,11 +187,11 @@ macro_rules! hal {
 
                     for byte in bytes {
                         // Wait until we are allowed to send data (START has been ACKed or last byte
-                        // when through)
+                        // went through)
                         busy_wait!(self.i2c, tx_e);
 
                         // put byte on the wire
-                        self.i2c.dr.write(|w| w.dr().bits(*byte));
+                        self.i2c.dr.write(|w| unsafe { w.dr().bits(*byte) });
                     }
 
                     // wait for transmission to finish
@@ -222,7 +221,7 @@ macro_rules! hal {
                     busy_wait!(self.i2c, sb);
 
                     // slave address, wait for ADDR
-                    self.i2c.dr.write(|w| w.dr().bits(addr << 1));
+                    self.i2c.dr.write(|w| unsafe { w.dr().bits(addr << 1) });
                     busy_wait!(self.i2c, addr);
 
                     // clear ADDR
@@ -234,7 +233,7 @@ macro_rules! hal {
                         busy_wait!(self.i2c, tx_e);
 
                         // put byte on the wire
-                        self.i2c.dr.write(|w| w.dr().bits(*byte));
+                        self.i2c.dr.write(|w| unsafe { w.dr().bits(*byte) });
                     }
 
                     // wait for transmission to finish
@@ -243,28 +242,78 @@ macro_rules! hal {
                     // STOP
                     self.i2c.cr1.write(|w| w.stop().set_bit());
 
-                    // reSTART and prepare to receive bytes into `buffer`
-                    self.i2c.cr2.write(|w| {
-                        w.sadd1()
-                            .bits(addr)
-                            .rd_wrn()
-                            .set_bit()
-                            .nbytes()
-                            .bits(buffer.len() as u8)
-                            .start()
-                            .set_bit()
-                            .autoend()
-                            .set_bit()
-                    });
+                    self.i2c.cr1.write(|w| w.ack().set_bit());
 
-                    for byte in buffer {
-                        // Wait until we have received something
-                        busy_wait!(self.i2c, rx_ne);
+                    // START, wait for SB
+                    self.i2c.cr1.write(|w| w.start().set_bit());
+                    busy_wait!(self.i2c, sb);
 
-                        *byte = self.i2c.dr.read().dr().bits();
+                    // slave address, wait for ADDR
+                    self.i2c.dr.write(|w| unsafe { w.dr().bits((addr << 1) | 1) });
+                    busy_wait!(self.i2c, addr);
+
+                    match buffer.len() {
+                        1 => {
+                            self.i2c.cr1.write(|w| w.ack().clear_bit());
+                        }
+                        2 => {
+                            self.i2c.cr1.write(|w| w.ack().clear_bit());
+                            self.i2c.cr1.write(|w| w.pos().set_bit());
+                        }
+                        _ => {}
                     }
 
-                    // automatic STOP
+                    // clear ADDR
+                    self.i2c.sr1.read();
+                    self.i2c.sr2.read();
+
+                    if buffer.len() > 3 {
+                        for byte in &mut buffer[3..] {
+                            busy_wait!(self.i2c, rx_ne);
+
+                            *byte = self.i2c.dr.read().dr().bits();
+                        }
+                    }
+
+                    match buffer.len() {
+                        1 => {
+                            busy_wait!(self.i2c, rx_ne);
+
+                            // STOP
+                            self.i2c.cr1.write(|w| w.stop().set_bit());
+
+                            buffer[0] = self.i2c.dr.read().dr().bits();
+                        }
+                        2 => {
+                            busy_wait!(self.i2c, rx_ne);
+
+                            busy_wait!(self.i2c, btf);
+
+                            // STOP
+                            self.i2c.cr1.write(|w| w.stop().set_bit());
+
+                            buffer[0] = self.i2c.dr.read().dr().bits();
+                            buffer[1] = self.i2c.dr.read().dr().bits();
+                        }
+                        3 => {
+                            busy_wait!(self.i2c, rx_ne);
+
+                            busy_wait!(self.i2c, btf);
+
+                            self.i2c.cr1.write(|w| w.ack().clear_bit());
+
+                            busy_wait!(self.i2c, rx_ne);
+
+                            busy_wait!(self.i2c, btf);
+
+                            // STOP
+                            self.i2c.cr1.write(|w| w.stop().set_bit());
+
+                            buffer[0] = self.i2c.dr.read().dr().bits();
+                            buffer[1] = self.i2c.dr.read().dr().bits();
+                        }
+                        _ => {}
+                    }
 
                     Ok(())
                 }
@@ -275,5 +324,5 @@ macro_rules! hal {
 
 hal! {
     I2C1: (i2c1, i2c1en, i2c1rst),
-//    I2C2: (i2c2, i2c2en, i2c2rst),
+    I2C2: (i2c2, i2c2en, i2c2rst),
 }
