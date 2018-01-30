@@ -53,6 +53,7 @@ pub mod examples;
 pub mod flash;
 pub mod gpio;
 pub mod prelude;
+pub mod i2c;
 pub mod pwm;
 pub mod qei;
 pub mod rcc;
